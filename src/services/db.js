@@ -11,7 +11,7 @@ import {
 const isSupabaseConfigured = () => {
   const url = import.meta.env.VITE_SUPABASE_URL;
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  return url && key && url !== 'https://ybwawtzaaznrsrxofoow.supabase.co/rest/v1/' && !url.includes('tu_proyecto_url');
+  return url && key && !url.includes('ybwawtzaaznrsrxofoow') && !url.includes('tu_proyecto_url');
 };
 
 // --- LOCAL STORAGE DATA HELPERS (Fallback Driver) ---
@@ -77,7 +77,8 @@ export const dbService = {
             email: usuario.email,
             rol: usuario.rol,
             cargo: usuario.cargo,
-            activo: usuario.activo
+            activo: usuario.activo,
+            ...(usuario.face_descriptor !== undefined && { face_descriptor: usuario.face_descriptor })
           })
           .eq('id', usuario.id)
           .select();
@@ -94,6 +95,51 @@ export const dbService = {
       setLocalData('sh_users', current);
     }
     return usuario;
+  },
+
+  async updateFaceDescriptor(userId, descriptor) {
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase
+          .from('usuarios')
+          .update({ face_descriptor: descriptor })
+          .eq('id', userId)
+          .select();
+        if (error) throw error;
+        return data[0];
+      } catch (err) {
+        console.error('Supabase updateFaceDescriptor failed:', err);
+      }
+    }
+    
+    const current = getLocalData('sh_users', DEFAULT_USERS);
+    const index = current.findIndex(u => u.id === userId);
+    if (index !== -1) {
+      current[index] = { ...current[index], face_descriptor: descriptor };
+      setLocalData('sh_users', current);
+      return current[index];
+    }
+    return null;
+  },
+
+  async getFaceDescriptor(userId) {
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase
+          .from('usuarios')
+          .select('face_descriptor')
+          .eq('id', userId)
+          .single();
+        if (error) throw error;
+        return data?.face_descriptor || null;
+      } catch (err) {
+        console.error('Supabase getFaceDescriptor failed:', err);
+      }
+    }
+    
+    const current = getLocalData('sh_users', DEFAULT_USERS);
+    const user = current.find(u => u.id === userId);
+    return user ? user.face_descriptor : null;
   },
 
   // 2. --- MOTIVOS DE PAUSA SERVICES ---

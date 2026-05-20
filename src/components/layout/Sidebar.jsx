@@ -14,7 +14,7 @@ import {
   FileCheck
 } from 'lucide-react';
 
-export default function Sidebar({ currentTab, setCurrentTab }) {
+export default function Sidebar({ currentTab, setCurrentTab, setSelectedEmployeeId }) {
   const { currentUser, users, loginAsUser, signOut } = useApp();
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
@@ -32,6 +32,13 @@ export default function Sidebar({ currentTab, setCurrentTab }) {
   ];
 
   const activeMenu = currentUser.rol === 'Administrador' ? adminMenu : employeeMenu;
+
+  const handleMenuClick = (id) => {
+    setCurrentTab(id);
+    if (id === 'admin-historial' && setSelectedEmployeeId) {
+      setSelectedEmployeeId('todos');
+    }
+  };
 
   return (
     <aside className="w-80 bg-dark-900 border-r border-dark-700/50 flex flex-col h-screen overflow-hidden text-slate-300">
@@ -75,6 +82,7 @@ export default function Sidebar({ currentTab, setCurrentTab }) {
                   onClick={() => {
                     loginAsUser(u.id);
                     setShowUserDropdown(false);
+                    if (setSelectedEmployeeId) setSelectedEmployeeId('todos');
                     // Automatically redirect to suitable dashboard
                     if (u.rol === 'Administrador') {
                       setCurrentTab('admin-dashboard');
@@ -109,7 +117,7 @@ export default function Sidebar({ currentTab, setCurrentTab }) {
           return (
             <button
               key={item.id}
-              onClick={() => setCurrentTab(item.id)}
+              onClick={() => handleMenuClick(item.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
                 isActive 
                   ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/10' 

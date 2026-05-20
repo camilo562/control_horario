@@ -25,7 +25,7 @@ export const AppProvider = ({ children }) => {
   const isSupabaseConfigured = () => {
     const url = import.meta.env.VITE_SUPABASE_URL;
     const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    return url && key && url !== 'https://ybwawtzaaznrsrxofoow.supabase.co/rest/v1/' && !url.includes('tu_proyecto_url');
+    return url && key && !url.includes('ybwawtzaaznrsrxofoow') && !url.includes('tu_proyecto_url');
   };
 
   // Centralized authentication profile handler
@@ -102,13 +102,23 @@ export const AppProvider = ({ children }) => {
     setLoading(true);
 
     // Get current session active on mount
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      if (error) {
+        console.error('Supabase session error:', error);
+        setCurrentUser(null);
+        setLoading(false);
+        return;
+      }
       if (session?.user) {
         await handleAuthUser(session.user);
       } else {
         setCurrentUser(null);
         setLoading(false);
       }
+    }).catch(err => {
+      console.error('Unexpected error in getSession:', err);
+      setCurrentUser(null);
+      setLoading(false);
     });
 
     // Listen to real-time authentication state updates
@@ -541,6 +551,22 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const registrarRostro = async (userId, descriptor) => {
+    try {
+      const savedUser = await dbService.updateFaceDescriptor(userId, descriptor);
+      if (savedUser) {
+        setUsers(prev => prev.map(u => u.id === userId ? savedUser : u));
+        if (currentUser?.id === userId) {
+          setCurrentUser(savedUser);
+          localStorage.setItem('ch_current_user', JSON.stringify(savedUser));
+        }
+      }
+    } catch (err) {
+      console.error('Error registrando rostro:', err);
+      throw err;
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       isSupabaseConfigured,
@@ -563,6 +589,7 @@ export const AppProvider = ({ children }) => {
       crearMotivoPausa,
       actualizarMotivoPausa,
       eliminarMotivoPausa,
+      registrarRostro,
       loginAsUser,
       signIn,
       signUp,

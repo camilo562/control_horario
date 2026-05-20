@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { formatSeconds, formatTimeOnly } from '../utils/formatters';
-import { Clock, Play, Pause, Square, AlertCircle, ArrowRight } from 'lucide-react';
+import { Clock, Play, Pause, Square, AlertCircle, ArrowRight, ScanFace } from 'lucide-react';
+import FaceVerificationModal from '../components/ui/FaceVerificationModal';
 
 export default function EmpleadoDashboard() {
   const { 
+    currentUser,
     activeShift, 
     elapsedSeconds, 
     motivosPausa,
     iniciarJornada, 
-    pausarJornada, 
-    reanudarJornada, 
+    pausarJornada,
+    reanudarJornada,
     finalizarJornada 
   } = useApp();
 
@@ -18,6 +20,16 @@ export default function EmpleadoDashboard() {
   const [selectedMotivo, setSelectedMotivo] = useState('');
   const [otroMotivo, setOtroMotivo] = useState('');
   const [errorText, setErrorText] = useState('');
+  const [showFaceVerification, setShowFaceVerification] = useState(false);
+  const [showNoFaceIdWarning, setShowNoFaceIdWarning] = useState(false);
+
+  const handleIniciarJornadaRequest = () => {
+    if (currentUser?.face_descriptor) {
+      setShowFaceVerification(true);
+    } else {
+      setShowNoFaceIdWarning(true);
+    }
+  };
 
   const handlePauseRequest = () => {
     // Populate active reasons and show modal
@@ -179,7 +191,7 @@ export default function EmpleadoDashboard() {
           <div className="w-full grid grid-cols-2 gap-4 mt-6">
             {/* Iniciar Button */}
             <button
-              onClick={iniciarJornada}
+              onClick={handleIniciarJornadaRequest}
               disabled={!!activeShift}
               className={`flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-sm transition-all duration-200 ${
                 !activeShift
@@ -346,6 +358,42 @@ export default function EmpleadoDashboard() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- FACE VERIFICATION MODAL --- */}
+      {showFaceVerification && (
+        <FaceVerificationModal
+          user={currentUser}
+          onSuccess={() => {
+            setShowFaceVerification(false);
+            iniciarJornada();
+          }}
+          onClose={() => setShowFaceVerification(false)}
+        />
+      )}
+
+      {/* --- NO FACE ID WARNING MODAL --- */}
+      {showNoFaceIdWarning && (
+        <div className="fixed inset-0 bg-dark-950/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-dark-900 border border-brand-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl relative shadow-brand-500/10 text-center">
+            <div className="w-16 h-16 bg-brand-500/10 rounded-2xl flex items-center justify-center text-brand-400 mx-auto mb-4">
+              <ScanFace className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">¡Hola, {currentUser?.nombre.split(' ')[0]}! 👋</h3>
+            <p className="text-sm text-slate-400 mb-6 px-2 leading-relaxed">
+              Vemos que aún no tienes tu Face ID configurado. Por ahora iniciaremos tu jornada de forma manual, pero te recomendamos pedirle a un administrador que registre tu rostro pronto para que tu ingreso sea más rápido y seguro.
+            </p>
+            <button
+              onClick={() => {
+                setShowNoFaceIdWarning(false);
+                iniciarJornada();
+              }}
+              className="w-full py-3.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-brand-600/20 transition-all active:scale-95"
+            >
+              Entendido, iniciar jornada
+            </button>
           </div>
         </div>
       )}

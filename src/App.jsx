@@ -1,4 +1,4 @@
-import React, { useState, Component } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
@@ -70,6 +70,11 @@ function MainLayout() {
   // State to pass target user audit id from Admin Dashboard to Admin Historial
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('todos');
 
+  // Reset filter when user changes (e.g. simulating user switch)
+  useEffect(() => {
+    setSelectedEmployeeId('todos');
+  }, [currentUser]);
+
   // RBAC checks for routing protection (RF-19)
   React.useEffect(() => {
     if (!currentUser) return;
@@ -135,7 +140,11 @@ function MainLayout() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-dark-950 text-slate-100 font-sans">
       {/* Left Sidebar Layout */}
-      <Sidebar currentTab={currentTab} setCurrentTab={setCurrentTab} />
+      <Sidebar 
+        currentTab={currentTab} 
+        setCurrentTab={setCurrentTab} 
+        setSelectedEmployeeId={setSelectedEmployeeId} 
+      />
 
       {/* Main Panel Content Area */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden bg-dark-950">

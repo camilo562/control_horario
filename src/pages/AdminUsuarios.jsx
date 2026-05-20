@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Plus, Edit2, Trash2, Shield, User, X, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Shield, User, X, AlertCircle, ScanFace } from 'lucide-react';
+import FaceRegistrationModal from '../components/ui/FaceRegistrationModal';
 
 export default function AdminUsuarios() {
   const { users, crearUsuario, actualizarUsuario, eliminarUsuario } = useApp();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null); // null if creating
+  const [faceRegUser, setFaceRegUser] = useState(null); // user to register face
   
   // Form fields
   const [nombre, setNombre] = useState('');
@@ -144,24 +146,37 @@ export default function AdminUsuarios() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-2 mt-6 pt-4 border-t border-dark-800">
+              <div className="flex flex-col gap-2 mt-6 pt-4 border-t border-dark-800">
                 <button
-                  onClick={() => openEditModal(user)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-dark-850 hover:bg-dark-800 border border-dark-800 hover:border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-all"
-                >
-                  <Edit2 className="w-3.5 h-3.5 text-slate-450" />
-                  <span>Editar</span>
-                </button>
-                <button
-                  onClick={() => handleToggleActive(user)}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all border ${
-                    isActivo
-                      ? 'bg-red-500/10 hover:bg-red-500/20 border-red-500/20 text-red-400'
-                      : 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/20 text-emerald-400'
+                  onClick={() => setFaceRegUser(user)}
+                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all border ${
+                    user.face_descriptor
+                      ? 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/20 text-emerald-400'
+                      : 'bg-dark-850 hover:bg-dark-800 border-dark-800 hover:border-brand-500/50 text-slate-300 hover:text-brand-400'
                   }`}
                 >
-                  {isActivo ? 'Desactivar' : 'Activar'}
+                  <ScanFace className="w-4 h-4" />
+                  <span>{user.face_descriptor ? 'Face ID Registrado (Actualizar)' : 'Registrar Face ID'}</span>
                 </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openEditModal(user)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-dark-850 hover:bg-dark-800 border border-dark-800 hover:border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-all"
+                  >
+                    <Edit2 className="w-3.5 h-3.5 text-slate-450" />
+                    <span>Editar</span>
+                  </button>
+                  <button
+                    onClick={() => handleToggleActive(user)}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all border ${
+                      isActivo
+                        ? 'bg-red-500/10 hover:bg-red-500/20 border-red-500/20 text-red-400'
+                        : 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/20 text-emerald-400'
+                    }`}
+                  >
+                    {isActivo ? 'Desactivar' : 'Activar'}
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -269,6 +284,14 @@ export default function AdminUsuarios() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* --- FACE REGISTRATION MODAL --- */}
+      {faceRegUser && (
+        <FaceRegistrationModal
+          user={faceRegUser}
+          onClose={() => setFaceRegUser(null)}
+        />
       )}
     </div>
   );

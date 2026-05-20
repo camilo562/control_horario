@@ -26,6 +26,7 @@ CREATE TABLE usuarios (
     avatar VARCHAR(10) NOT NULL,
     cargo TEXT,
     activo BOOLEAN NOT NULL DEFAULT TRUE,
+    face_descriptor JSONB DEFAULT NULL,
     creado_en TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
