@@ -27,7 +27,7 @@ CREATE TABLE usuarios (
     cargo TEXT,
     telefono_codigo_pais VARCHAR(8),
     telefono_numero VARCHAR(30),
-    telefono_whatsapp VARCHAR(40) UNIQUE,
+    telefono_whatsapp VARCHAR(40),
     activo BOOLEAN NOT NULL DEFAULT TRUE,
     face_descriptor JSONB DEFAULT NULL,
     creado_en TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL

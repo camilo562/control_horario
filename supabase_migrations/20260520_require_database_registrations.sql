@@ -7,7 +7,7 @@ ALTER TABLE public.usuarios
   ADD COLUMN IF NOT EXISTS telefono_whatsapp VARCHAR(40),
   ADD COLUMN IF NOT EXISTS face_descriptor JSONB DEFAULT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_telefono_whatsapp
+CREATE INDEX IF NOT EXISTS idx_usuarios_telefono_whatsapp
   ON public.usuarios(telefono_whatsapp)
   WHERE telefono_whatsapp IS NOT NULL;
 
