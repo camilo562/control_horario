@@ -182,6 +182,67 @@ CREATE POLICY "Solo administradores pueden gestionar anuncios"
     USING (EXISTS (SELECT 1 FROM usuarios u WHERE u.id = auth.uid()::text AND u.rol = 'Administrador'))
     WITH CHECK (EXISTS (SELECT 1 FROM usuarios u WHERE u.id = auth.uid()::text AND u.rol = 'Administrador'));
 
+-- ---------------------------------------------------------------------
+-- 5.1. TRIGGER: CREAR PERFIL PUBLICO AL REGISTRARSE EN SUPABASE AUTH
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  metadata JSONB := COALESCE(NEW.raw_user_meta_data, '{}'::jsonb);
+  profile_name TEXT := COALESCE(NULLIF(metadata->>'nombre', ''), split_part(NEW.email, '@', 1));
+  clean_avatar TEXT := UPPER(LEFT(REGEXP_REPLACE(profile_name, '[^[:alnum:]]', '', 'g'), 2));
+BEGIN
+  INSERT INTO public.usuarios (
+    id,
+    nombre,
+    email,
+    rol,
+    avatar,
+    cargo,
+    telefono_codigo_pais,
+    telefono_numero,
+    telefono_whatsapp,
+    activo
+  )
+  VALUES (
+    NEW.id::text,
+    profile_name,
+    NEW.email,
+    CASE
+      WHEN metadata->>'rol' IN ('Empleado', 'Administrador') THEN metadata->>'rol'
+      ELSE 'Empleado'
+    END,
+    COALESCE(NULLIF(clean_avatar, ''), 'US'),
+    COALESCE(NULLIF(metadata->>'cargo', ''), 'Operario de Confeccion'),
+    NULLIF(metadata->>'telefono_codigo_pais', ''),
+    NULLIF(metadata->>'telefono_numero', ''),
+    NULLIF(metadata->>'telefono_whatsapp', ''),
+    TRUE
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    nombre = EXCLUDED.nombre,
+    email = EXCLUDED.email,
+    rol = EXCLUDED.rol,
+    avatar = EXCLUDED.avatar,
+    cargo = EXCLUDED.cargo,
+    telefono_codigo_pais = EXCLUDED.telefono_codigo_pais,
+    telefono_numero = EXCLUDED.telefono_numero,
+    telefono_whatsapp = EXCLUDED.telefono_whatsapp,
+    activo = TRUE;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_auth_user();
+
 
 -- ---------------------------------------------------------------------
 -- 6. POBLAR DATOS INICIALES (Mock Data Semilla)

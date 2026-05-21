@@ -55,6 +55,11 @@ export default function AuthPage() {
     setErrorMsg('');
     setSuccessMsg('');
 
+    if (!isSupabaseConfigured()) {
+      setErrorMsg('La base de datos no esta configurada. No se enviara OTP ni se guardaran registros en modo local.');
+      return;
+    }
+
     const validation = validarTelefonoWhatsapp({ codigoPais, celular });
     if (!validation.ok) {
       setErrorMsg(validation.error);
@@ -89,6 +94,11 @@ export default function AuthPage() {
       return;
     }
 
+    if (!isSupabaseConfigured()) {
+      setErrorMsg('La base de datos no esta configurada. El ingreso solo funciona con Supabase activo.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await signIn(email, password);
@@ -109,6 +119,11 @@ export default function AuthPage() {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
+
+    if (!isSupabaseConfigured()) {
+      setErrorMsg('La base de datos no esta configurada. No se crearan usuarios en modo local.');
+      return;
+    }
 
     // Validations (Rule 3.5)
     if (!nombre || !email || !password || !confirmPassword || !celular) {
@@ -154,11 +169,7 @@ export default function AuthPage() {
       if (res && res.error) {
         setErrorMsg(res.error.message || 'Error al registrar usuario.');
       } else {
-        if (isSupabaseConfigured()) {
-          setSuccessMsg('¡Registro exitoso! Por favor revisa tu correo electrónico para confirmar la cuenta (o inicia sesión directamente si desactivaste la confirmación de correo en Supabase).');
-        } else {
-          setSuccessMsg('¡Registro simulado exitoso! Ahora puedes iniciar sesión con esta cuenta.');
-        }
+        setSuccessMsg('¡Registro exitoso! Por favor revisa tu correo electrónico para confirmar la cuenta (o inicia sesión directamente si desactivaste la confirmación de correo en Supabase).');
         // Switch to login tab after brief delay
         setTimeout(() => {
           setIsRegistering(false);
@@ -188,12 +199,12 @@ export default function AuthPage() {
         
         {/* Connection status banner */}
         {!isSupabaseConfigured() && (
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-center text-amber-400 text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-500/5">
+          <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-center text-red-300 text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-500/5">
             <span className="flex h-2 w-2 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
             </span>
-            <span><strong>Modo Local Activo:</strong> Supabase no configurado en `.env.local`. Utilizando almacenamiento local simulado.</span>
+            <span><strong>Base de datos requerida:</strong> Supabase no esta configurado. No se guardaran registros locales.</span>
           </div>
         )}
 
@@ -361,7 +372,7 @@ export default function AuthPage() {
                 <button
                   type="button"
                   onClick={handleSolicitarOtp}
-                  disabled={otpEnviando || submitting}
+                  disabled={otpEnviando || submitting || !isSupabaseConfigured()}
                   className="w-full py-3 bg-emerald-600/90 hover:bg-emerald-500 disabled:bg-emerald-600/40 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-emerald-600/10 active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
                   <MessageCircle className="w-4 h-4" />
@@ -455,7 +466,7 @@ export default function AuthPage() {
 
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !isSupabaseConfigured()}
                 className="w-full py-4 mt-6 bg-brand-600 hover:bg-brand-500 disabled:bg-brand-600/50 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-brand-600/20 active:scale-95 transition-all"
               >
                 {submitting ? 'Creando cuenta...' : 'Crear mi cuenta'}

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { calculateNetTime } from '../utils/formatters';
 import { dbService } from '../services/db';
-import { supabase } from '../services/supabase';
+import { getSupabaseConfigMessage, isSupabaseConfigured, supabase } from '../services/supabase';
 
 const AppContext = createContext();
 
@@ -21,13 +21,6 @@ export const AppProvider = ({ children }) => {
   const [activeShift, setActiveShift] = useState(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  // Helper to determine if we should use Supabase or fallback to localStorage
-  const isSupabaseConfigured = () => {
-    const url = import.meta.env.VITE_SUPABASE_URL;
-    const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    return url && key && !url.includes('ybwawtzaaznrsrxofoow') && !url.includes('tu_proyecto_url');
-  };
-
   // Centralized authentication profile handler
   const handleAuthUser = async (sbUser) => {
     try {
@@ -36,7 +29,7 @@ export const AppProvider = ({ children }) => {
 
       let profile = uList.find(u => u.id === sbUser.id);
       
-      // Fallback: If they successfully registered in Auth but profile row is missing in public.usuarios, create it
+      // Recovery: if Auth exists but public.usuarios is missing, create the DB profile.
       if (!profile) {
         const metadata = sbUser.user_metadata || {};
         const nombre = metadata.nombre || sbUser.email.split('@')[0];
@@ -57,7 +50,6 @@ export const AppProvider = ({ children }) => {
       }
 
       setCurrentUser(profile);
-      localStorage.setItem('ch_current_user', JSON.stringify(profile));
 
       // Load all workspace resources for the logged-in user
       const [mList, sList, aList, active] = await Promise.all([
@@ -81,24 +73,9 @@ export const AppProvider = ({ children }) => {
   // Setup authentication subscription listeners
   useEffect(() => {
     if (!isSupabaseConfigured()) {
-      // Offline simulated driver boot sequence
-      const mockInit = async () => {
-        try {
-          const uList = await dbService.getUsuarios();
-          setUsers(uList);
-          const saved = localStorage.getItem('ch_current_user');
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            const found = uList.find(u => u.id === parsed.id);
-            setCurrentUser(found || null);
-          }
-        } catch (err) {
-          console.error('Failed to boot local simulated state:', err);
-        } finally {
-          setLoading(false);
-        }
-      };
-      mockInit();
+      console.error(getSupabaseConfigMessage());
+      setCurrentUser(null);
+      setLoading(false);
       return;
     }
 
@@ -160,45 +137,11 @@ export const AppProvider = ({ children }) => {
     return () => clearInterval(interval);
   }, [activeShift]);
 
-  // Simulated profile switcher helper (used in Local Switcher card)
-  const loginAsUser = async (userId) => {
-    if (isSupabaseConfigured()) {
-      alert('Cambio rápido no disponible en modo Supabase. Por favor cierra sesión para cambiar de cuenta.');
-      return;
-    }
-    const user = users.find(u => u.id === userId);
-    if (user) {
-      setCurrentUser(user);
-      localStorage.setItem('ch_current_user', JSON.stringify(user));
-      
-      setLoading(true);
-      const active = await dbService.getJornadaActiva(userId);
-      setActiveShift(active);
-      setLoading(false);
-    }
-  };
-
   // --- AUTHENTICATION ACTIONS ---
 
   const signIn = async (email, password) => {
     if (!isSupabaseConfigured()) {
-      // Local Mock Driver Login
-      const uList = await dbService.getUsuarios();
-      const found = uList.find(u => u.email.toLowerCase() === email.toLowerCase());
-      if (found) {
-        if (!found.activo) {
-          return { error: { message: 'Esta cuenta ha sido desactivada por el administrador.' } };
-        }
-        setCurrentUser(found);
-        localStorage.setItem('ch_current_user', JSON.stringify(found));
-        
-        setLoading(true);
-        const active = await dbService.getJornadaActiva(found.id);
-        setActiveShift(active);
-        setLoading(false);
-        return { data: { user: found }, error: null };
-      }
-      return { error: { message: 'El correo electrónico no está registrado en el simulador local.' } };
+      return { error: { message: getSupabaseConfigMessage() } };
     }
 
     try {
@@ -211,37 +154,7 @@ export const AppProvider = ({ children }) => {
 
   const signUp = async (nombre, email, cargo, rol, password, telefono = {}) => {
     if (!isSupabaseConfigured()) {
-      // Local Mock Driver Register
-      const uList = await dbService.getUsuarios();
-      const emailExists = uList.some(u => u.email.toLowerCase() === email.toLowerCase());
-      const phoneExists = telefono.telefono_whatsapp
-        ? uList.some(u => u.telefono_whatsapp === telefono.telefono_whatsapp)
-        : false;
-
-      if (emailExists) {
-        return { error: { message: 'El correo electronico ya esta registrado.' } };
-      }
-
-      if (phoneExists) {
-        return { error: { message: 'Este celular ya esta registrado con otro usuario.' } };
-      }
-
-      const newUser = {
-        id: `u-${Date.now()}`,
-        nombre,
-        email,
-        rol,
-        avatar: nombre.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-        cargo,
-        telefono_codigo_pais: telefono.telefono_codigo_pais || '',
-        telefono_numero: telefono.telefono_numero || '',
-        telefono_whatsapp: telefono.telefono_whatsapp || '',
-        activo: true,
-        creado_en: new Date().toISOString()
-      };
-      await dbService.insertUsuario(newUser);
-      setUsers(prev => [...prev, newUser]);
-      return { data: { user: newUser }, error: null };
+      return { error: { message: getSupabaseConfigMessage() } };
     }
 
     try {
@@ -262,21 +175,6 @@ export const AppProvider = ({ children }) => {
 
       if (error) return { error };
 
-      if (data.user) {
-        const profile = {
-          id: data.user.id,
-          nombre,
-          email,
-          rol,
-          avatar: nombre.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-          cargo,
-          telefono_codigo_pais: telefono.telefono_codigo_pais || '',
-          telefono_numero: telefono.telefono_numero || '',
-          telefono_whatsapp: telefono.telefono_whatsapp || '',
-          activo: true
-        };
-        await dbService.insertUsuario(profile);
-      }
       return { data, error: null };
     } catch (err) {
       return { error: err };
@@ -290,7 +188,6 @@ export const AppProvider = ({ children }) => {
       }
       setCurrentUser(null);
       setActiveShift(null);
-      localStorage.removeItem('ch_current_user');
     } catch (err) {
       console.error('Error logging out:', err);
     }
@@ -584,7 +481,6 @@ export const AppProvider = ({ children }) => {
         setUsers(prev => prev.map(u => u.id === userId ? savedUser : u));
         if (currentUser?.id === userId) {
           setCurrentUser(savedUser);
-          localStorage.setItem('ch_current_user', JSON.stringify(savedUser));
         }
       }
     } catch (err) {
@@ -616,7 +512,6 @@ export const AppProvider = ({ children }) => {
       actualizarMotivoPausa,
       eliminarMotivoPausa,
       registrarRostro,
-      loginAsUser,
       signIn,
       signUp,
       signOut
