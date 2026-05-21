@@ -25,6 +25,9 @@ CREATE TABLE usuarios (
     rol TEXT NOT NULL CHECK (rol IN ('Empleado', 'Administrador')),
     avatar VARCHAR(10) NOT NULL,
     cargo TEXT,
+    telefono_codigo_pais VARCHAR(8),
+    telefono_numero VARCHAR(30),
+    telefono_whatsapp VARCHAR(40) UNIQUE,
     activo BOOLEAN NOT NULL DEFAULT TRUE,
     face_descriptor JSONB DEFAULT NULL,
     creado_en TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
@@ -86,6 +89,7 @@ CREATE TABLE anuncios (
 -- ---------------------------------------------------------------------
 -- 3. CREACIÓN DE ÍNDICES PARA OPTIMIZACIÓN
 -- ---------------------------------------------------------------------
+CREATE INDEX idx_usuarios_telefono_whatsapp ON usuarios(telefono_whatsapp);
 CREATE INDEX idx_jornadas_usuario_id ON jornadas(usuario_id);
 CREATE INDEX idx_jornadas_fecha ON jornadas(fecha);
 CREATE INDEX idx_pausas_jornada_id ON pausas(jornada_id);
@@ -107,6 +111,10 @@ ALTER TABLE anuncios ENABLE ROW LEVEL SECURITY;
 -- TABLA: usuarios
 CREATE POLICY "Cualquier usuario autenticado puede leer usuarios" 
     ON usuarios FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Usuarios pueden crear su propio perfil inicial"
+    ON usuarios FOR INSERT TO authenticated
+    WITH CHECK (id = auth.uid()::text);
 
 CREATE POLICY "Solo administradores pueden modificar usuarios" 
     ON usuarios FOR ALL TO authenticated 

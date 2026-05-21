@@ -1,9 +1,17 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Clock, Mail, Lock, User, Briefcase, Shield, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { Clock, Mail, Lock, User, Briefcase, Shield, ArrowRight, Eye, EyeOff, Phone, MessageCircle, KeyRound } from 'lucide-react';
+import {
+  CODIGOS_PAIS_WHATSAPP,
+  DEFAULT_COUNTRY_CODE,
+  ejemploPorCodigoPais,
+  solicitarCodigoOtpWhatsapp,
+  verificarCodigoOtpWhatsapp,
+  validarTelefonoWhatsapp
+} from '../verificacion_whatsapp';
 
 export default function AuthPage() {
-  const { isSupabaseConfigured, signIn, signUp, loading } = useApp();
+  const { isSupabaseConfigured, signIn, signUp } = useApp();
   const [isRegistering, setIsRegistering] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -14,6 +22,11 @@ export default function AuthPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [cargo, setCargo] = useState('Operario de Confección');
   const [rol, setRol] = useState('Empleado');
+  const [codigoPais, setCodigoPais] = useState(DEFAULT_COUNTRY_CODE);
+  const [celular, setCelular] = useState('');
+  const [codigoOtp, setCodigoOtp] = useState('');
+  const [otpSolicitado, setOtpSolicitado] = useState(false);
+  const [otpEnviando, setOtpEnviando] = useState(false);
 
   // UI feedback states
   const [errorMsg, setErrorMsg] = useState('');
@@ -25,8 +38,45 @@ export default function AuthPage() {
     setEmail('');
     setPassword('');
     setConfirmPassword('');
+    setCodigoPais(DEFAULT_COUNTRY_CODE);
+    setCelular('');
+    setCodigoOtp('');
+    setOtpSolicitado(false);
     setErrorMsg('');
     setSuccessMsg('');
+  };
+
+  const resetOtpState = () => {
+    setCodigoOtp('');
+    setOtpSolicitado(false);
+  };
+
+  const handleSolicitarOtp = async () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    const validation = validarTelefonoWhatsapp({ codigoPais, celular });
+    if (!validation.ok) {
+      setErrorMsg(validation.error);
+      return;
+    }
+
+    setOtpEnviando(true);
+    try {
+      const res = await solicitarCodigoOtpWhatsapp({ codigoPais, celular, nombre: nombre.trim() });
+      if (!res.ok) {
+        setErrorMsg(res.error || 'No se pudo enviar el codigo OTP.');
+        return;
+      }
+
+      setOtpSolicitado(true);
+      setSuccessMsg(`Codigo OTP enviado por WhatsApp a +${res.telefono.telefono_whatsapp}.`);
+    } catch (err) {
+      setErrorMsg('No se pudo solicitar el codigo OTP.');
+      console.error(err);
+    } finally {
+      setOtpEnviando(false);
+    }
   };
 
   const handleLogin = async (e) => {
@@ -61,8 +111,14 @@ export default function AuthPage() {
     setSuccessMsg('');
 
     // Validations (Rule 3.5)
-    if (!nombre || !email || !password || !confirmPassword) {
+    if (!nombre || !email || !password || !confirmPassword || !celular) {
       setErrorMsg('Por favor completa todos los campos.');
+      return;
+    }
+
+    const phoneValidation = validarTelefonoWhatsapp({ codigoPais, celular });
+    if (!phoneValidation.ok) {
+      setErrorMsg(phoneValidation.error);
       return;
     }
 
@@ -76,9 +132,25 @@ export default function AuthPage() {
       return;
     }
 
+    if (!otpSolicitado) {
+      setErrorMsg('Primero valida el celular enviando el codigo OTP por WhatsApp.');
+      return;
+    }
+
+    if (!codigoOtp) {
+      setErrorMsg('Ingresa el codigo OTP recibido por WhatsApp.');
+      return;
+    }
+
+    const otpValidation = verificarCodigoOtpWhatsapp({ codigoPais, celular, codigoOtp });
+    if (!otpValidation.ok) {
+      setErrorMsg(otpValidation.error);
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const res = await signUp(nombre, email, cargo, rol, password);
+      const res = await signUp(nombre, email, cargo, rol, password, otpValidation.telefono);
       if (res && res.error) {
         setErrorMsg(res.error.message || 'Error al registrar usuario.');
       } else {
@@ -92,6 +164,8 @@ export default function AuthPage() {
           setIsRegistering(false);
           setPassword('');
           setConfirmPassword('');
+          setCodigoOtp('');
+          setOtpSolicitado(false);
           setErrorMsg('');
           setSuccessMsg('');
         }, 4000);
@@ -246,6 +320,73 @@ export default function AuthPage() {
                   />
                 </div>
               </div>
+
+              <div className="space-y-3">
+                <div className="grid grid-cols-[minmax(0,1fr)_1.25fr] gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Pais:</label>
+                    <div className="relative">
+                      <Phone className="absolute left-3.5 top-3.5 w-3.5 h-3.5 text-slate-500" />
+                      <select
+                        value={codigoPais}
+                        onChange={(e) => { setCodigoPais(e.target.value); resetOtpState(); }}
+                        className="w-full bg-dark-950 border border-dark-750 text-white rounded-xl pl-9 pr-2 py-3 text-xs focus:border-brand-500 focus:outline-none transition-colors appearance-none"
+                      >
+                        {CODIGOS_PAIS_WHATSAPP.map((pais) => (
+                          <option key={`${pais.iso}-${pais.codigo}`} value={pais.codigo}>
+                            {pais.nombre} {pais.codigo}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Celular WhatsApp:</label>
+                    <div className="relative">
+                      <Phone className="absolute left-4 top-3.5 w-4 h-4 text-slate-500" />
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        value={celular}
+                        onChange={(e) => { setCelular(e.target.value.replace(/\D+/g, '').slice(0, 14)); resetOtpState(); }}
+                        placeholder={ejemploPorCodigoPais(codigoPais)}
+                        className="w-full bg-dark-950 border border-dark-750 text-white rounded-xl pl-11 pr-4 py-3.5 text-sm focus:border-brand-500 focus:outline-none transition-colors"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSolicitarOtp}
+                  disabled={otpEnviando || submitting}
+                  className="w-full py-3 bg-emerald-600/90 hover:bg-emerald-500 disabled:bg-emerald-600/40 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-emerald-600/10 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  {otpEnviando ? 'Enviando codigo...' : otpSolicitado ? 'Reenviar codigo' : 'Validar codigo'}
+                </button>
+              </div>
+
+              {otpSolicitado && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Codigo OTP:</label>
+                  <div className="relative">
+                    <KeyRound className="absolute left-4 top-3.5 w-4 h-4 text-slate-500" />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={codigoOtp}
+                      onChange={(e) => setCodigoOtp(e.target.value.replace(/\D+/g, '').slice(0, 6))}
+                      placeholder="123456"
+                      className="w-full bg-dark-950 border border-dark-750 text-white rounded-xl pl-11 pr-4 py-3.5 text-sm tracking-[0.25em] focus:border-brand-500 focus:outline-none transition-colors"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

@@ -78,6 +78,9 @@ export const dbService = {
             rol: usuario.rol,
             cargo: usuario.cargo,
             activo: usuario.activo,
+            ...(usuario.telefono_codigo_pais !== undefined && { telefono_codigo_pais: usuario.telefono_codigo_pais || null }),
+            ...(usuario.telefono_numero !== undefined && { telefono_numero: usuario.telefono_numero || null }),
+            ...(usuario.telefono_whatsapp !== undefined && { telefono_whatsapp: usuario.telefono_whatsapp || null }),
             ...(usuario.face_descriptor !== undefined && { face_descriptor: usuario.face_descriptor })
           })
           .eq('id', usuario.id)
