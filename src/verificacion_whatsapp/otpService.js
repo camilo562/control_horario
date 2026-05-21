@@ -66,7 +66,12 @@ export const solicitarCodigoOtpWhatsapp = async ({ codigoPais, celular, nombre }
 
   if (result.ok) {
     guardarCodigo({ telefono_whatsapp: telefono.telefono_whatsapp, codigo });
-    return { ok: true, modo: result.modo, telefono };
+    return {
+      ok: true,
+      modo: result.modo,
+      telefono,
+      codigo: result.modo === 'local-simulado' ? codigo : undefined
+    };
   }
 
   return { ok: false, error: result.error || 'No se pudo enviar el codigo por WhatsApp.' };

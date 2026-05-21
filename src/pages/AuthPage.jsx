@@ -11,7 +11,7 @@ import {
 } from '../verificacion_whatsapp';
 
 export default function AuthPage() {
-  const { isSupabaseConfigured, signIn, signUp } = useApp();
+  const { isDatabaseConfigured, signIn, signUp } = useApp();
   const [isRegistering, setIsRegistering] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -55,8 +55,8 @@ export default function AuthPage() {
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!isSupabaseConfigured()) {
-      setErrorMsg('La base de datos no esta configurada. No se enviara OTP ni se guardaran registros en modo local.');
+    if (!isDatabaseConfigured()) {
+      setErrorMsg('La base de datos local no esta disponible. No se enviara OTP ni se guardaran registros.');
       return;
     }
 
@@ -75,7 +75,11 @@ export default function AuthPage() {
       }
 
       setOtpSolicitado(true);
-      setSuccessMsg(`Codigo OTP enviado por WhatsApp a +${res.telefono.telefono_whatsapp}.`);
+      setSuccessMsg(
+        res.codigo
+          ? `Codigo OTP local para +${res.telefono.telefono_whatsapp}: ${res.codigo}.`
+          : `Codigo OTP enviado por WhatsApp a +${res.telefono.telefono_whatsapp}.`
+      );
     } catch (err) {
       setErrorMsg('No se pudo solicitar el codigo OTP.');
       console.error(err);
@@ -94,8 +98,8 @@ export default function AuthPage() {
       return;
     }
 
-    if (!isSupabaseConfigured()) {
-      setErrorMsg('La base de datos no esta configurada. El ingreso solo funciona con Supabase activo.');
+    if (!isDatabaseConfigured()) {
+      setErrorMsg('La base de datos local no esta disponible. Verifica el backend y MySQL.');
       return;
     }
 
@@ -120,8 +124,8 @@ export default function AuthPage() {
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!isSupabaseConfigured()) {
-      setErrorMsg('La base de datos no esta configurada. No se crearan usuarios en modo local.');
+    if (!isDatabaseConfigured()) {
+      setErrorMsg('La base de datos local no esta disponible. No se crearan usuarios.');
       return;
     }
 
@@ -169,7 +173,7 @@ export default function AuthPage() {
       if (res && res.error) {
         setErrorMsg(res.error.message || 'Error al registrar usuario.');
       } else {
-        setSuccessMsg('¡Registro exitoso! Por favor revisa tu correo electrónico para confirmar la cuenta (o inicia sesión directamente si desactivaste la confirmación de correo en Supabase).');
+        setSuccessMsg('¡Registro exitoso! Ya puedes iniciar sesión con tu correo y contraseña.');
         // Switch to login tab after brief delay
         setTimeout(() => {
           setIsRegistering(false);
@@ -198,13 +202,13 @@ export default function AuthPage() {
       <div className="max-w-md w-full relative z-10 space-y-6">
         
         {/* Connection status banner */}
-        {!isSupabaseConfigured() && (
+        {!isDatabaseConfigured() && (
           <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-center text-red-300 text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-500/5">
             <span className="flex h-2 w-2 relative">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
             </span>
-            <span><strong>Base de datos requerida:</strong> Supabase no esta configurado. No se guardaran registros locales.</span>
+            <span><strong>Base de datos requerida:</strong> MySQL local no esta disponible. No se guardaran registros.</span>
           </div>
         )}
 
@@ -372,7 +376,7 @@ export default function AuthPage() {
                 <button
                   type="button"
                   onClick={handleSolicitarOtp}
-                  disabled={otpEnviando || submitting || !isSupabaseConfigured()}
+                  disabled={otpEnviando || submitting || !isDatabaseConfigured()}
                   className="w-full py-3 bg-emerald-600/90 hover:bg-emerald-500 disabled:bg-emerald-600/40 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-emerald-600/10 active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
                   <MessageCircle className="w-4 h-4" />
@@ -466,7 +470,7 @@ export default function AuthPage() {
 
               <button
                 type="submit"
-                disabled={submitting || !isSupabaseConfigured()}
+                disabled={submitting || !isDatabaseConfigured()}
                 className="w-full py-4 mt-6 bg-brand-600 hover:bg-brand-500 disabled:bg-brand-600/50 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-brand-600/20 active:scale-95 transition-all"
               >
                 {submitting ? 'Creando cuenta...' : 'Crear mi cuenta'}

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Plus, Edit2, Trash2, Shield, User, X, AlertCircle, ScanFace } from 'lucide-react';
+import { Plus, Edit2, Shield, User, X, AlertCircle, ScanFace } from 'lucide-react';
 import FaceRegistrationModal from '../components/ui/FaceRegistrationModal';
 
 export default function AdminUsuarios() {
-  const { users, crearUsuario, actualizarUsuario, eliminarUsuario } = useApp();
+  const { users, crearUsuario, actualizarUsuario } = useApp();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null); // null if creating
@@ -13,6 +13,7 @@ export default function AdminUsuarios() {
   // Form fields
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [rol, setRol] = useState('Empleado');
   const [cargo, setCargo] = useState('');
   const [errorText, setErrorText] = useState('');
@@ -21,6 +22,7 @@ export default function AdminUsuarios() {
     setEditingUser(null);
     setNombre('');
     setEmail('');
+    setPassword('');
     setRol('Empleado');
     setCargo('');
     setErrorText('');
@@ -31,6 +33,7 @@ export default function AdminUsuarios() {
     setEditingUser(user);
     setNombre(user.nombre);
     setEmail(user.email);
+    setPassword('');
     setRol(user.rol);
     setCargo(user.cargo || '');
     setErrorText('');
@@ -43,6 +46,11 @@ export default function AdminUsuarios() {
 
     if (!nombre.trim() || !email.trim()) {
       setErrorText('El nombre y el correo son obligatorios.');
+      return;
+    }
+
+    if (!editingUser && password.length < 6) {
+      setErrorText('La contraseÃ±a inicial debe tener al menos 6 caracteres.');
       return;
     }
 
@@ -64,6 +72,7 @@ export default function AdminUsuarios() {
       crearUsuario({
         nombre: nombre.trim(),
         email: email.trim(),
+        password,
         rol,
         cargo: cargo.trim()
       });
@@ -235,6 +244,23 @@ export default function AdminUsuarios() {
                   required
                 />
               </div>
+
+              {/* Contraseña inicial */}
+              {!editingUser && (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    ContraseÃ±a Inicial
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="MÃ­nimo 6 caracteres"
+                    className="w-full bg-dark-800 border border-dark-750 text-white rounded-xl px-4 py-3 text-xs focus:border-brand-500 focus:outline-none"
+                    required
+                  />
+                </div>
+              )}
 
               {/* Cargo */}
               <div>

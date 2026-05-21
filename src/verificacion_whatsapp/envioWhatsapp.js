@@ -14,6 +14,7 @@ export const enviarMensajeWhatsapp = async ({ to, message }) => {
   const telefono = String(to || '').replace(/\D+/g, '');
   const texto = String(message || '').trim();
   const endpoint = resolverEndpointEnvio();
+  const usarOtpLocal = String(import.meta.env.VITE_OTP_LOCAL_SIMULATION || '').toLowerCase() === 'true';
 
   if (!telefono) {
     return { ok: false, error: 'Falta el telefono de destino.' };
@@ -21,6 +22,11 @@ export const enviarMensajeWhatsapp = async ({ to, message }) => {
 
   if (!texto) {
     return { ok: false, error: 'El mensaje no puede estar vacio.' };
+  }
+
+  if (usarOtpLocal) {
+    console.info('OTP local simulado activo. No se enviara WhatsApp real.');
+    return { ok: true, modo: 'local-simulado' };
   }
 
   try {

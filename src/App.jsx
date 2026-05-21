@@ -94,7 +94,7 @@ function MainLayout() {
           <div className="w-12 h-12 rounded-full border-4 border-brand-500/20 border-t-brand-500 animate-spin mx-auto shadow-lg shadow-brand-500/10"></div>
           <div className="space-y-2">
             <h3 className="text-xs font-semibold text-white tracking-wider uppercase">Sammers Jeans</h3>
-            <p className="text-[11px] text-slate-400">Estableciendo conexión de seguridad con Supabase...</p>
+            <p className="text-[11px] text-slate-400">Estableciendo conexión con la base de datos local...</p>
           </div>
         </div>
       </div>

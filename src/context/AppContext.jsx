@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { calculateNetTime } from '../utils/formatters';
+import { authService, getDatabaseConfigMessage, isDatabaseConfigured } from '../services/api';
 import { dbService } from '../services/db';
-import { getSupabaseConfigMessage, isSupabaseConfigured, supabase } from '../services/supabase';
 
 const AppContext = createContext();
 
@@ -21,179 +21,118 @@ export const AppProvider = ({ children }) => {
   const [activeShift, setActiveShift] = useState(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  // Centralized authentication profile handler
-  const handleAuthUser = async (sbUser) => {
-    try {
-      const uList = await dbService.getUsuarios();
-      setUsers(uList);
+  const loadWorkspaceForUser = async (authUser) => {
+    const uList = await dbService.getUsuarios();
+    setUsers(uList);
 
-      let profile = uList.find(u => u.id === sbUser.id);
-      
-      // Recovery: if Auth exists but public.usuarios is missing, create the DB profile.
-      if (!profile) {
-        const metadata = sbUser.user_metadata || {};
-        const nombre = metadata.nombre || sbUser.email.split('@')[0];
-        profile = {
-          id: sbUser.id,
-          nombre,
-          email: sbUser.email,
-          rol: metadata.rol || 'Empleado',
-          avatar: nombre.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-          cargo: metadata.cargo || 'Operario de Confección',
-          telefono_codigo_pais: metadata.telefono_codigo_pais || '',
-          telefono_numero: metadata.telefono_numero || '',
-          telefono_whatsapp: metadata.telefono_whatsapp || '',
-          activo: true
-        };
-        await dbService.insertUsuario(profile);
-        setUsers(prev => [...prev, profile]);
+    const profile = uList.find((u) => u.id === authUser.id) || authUser;
+    setCurrentUser(profile);
+
+    const [mList, sList, aList, active] = await Promise.all([
+      dbService.getMotivosPausa(),
+      dbService.getHistorialGlobal(),
+      dbService.getAuditLogs(),
+      dbService.getJornadaActiva(profile.id)
+    ]);
+
+    setMotivosPausa(mList);
+    setShifts(sList);
+    setAuditLogs(aList);
+    setActiveShift(active);
+    return profile;
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const boot = async () => {
+      setLoading(true);
+      try {
+        const session = await authService.getSession();
+        if (!mounted) return;
+
+        if (session.user) {
+          await loadWorkspaceForUser(session.user);
+        } else {
+          setCurrentUser(null);
+          setActiveShift(null);
+        }
+      } catch (err) {
+        console.error('Error conectando con la base de datos local:', err);
+        if (mounted) {
+          setCurrentUser(null);
+          setActiveShift(null);
+        }
+      } finally {
+        if (mounted) setLoading(false);
       }
+    };
 
-      setCurrentUser(profile);
+    boot();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-      // Load all workspace resources for the logged-in user
-      const [mList, sList, aList, active] = await Promise.all([
-        dbService.getMotivosPausa(),
-        dbService.getHistorialGlobal(),
-        dbService.getAuditLogs(),
-        dbService.getJornadaActiva(profile.id)
-      ]);
+  useEffect(() => {
+    if (!activeShift) {
+      const timeout = setTimeout(() => setElapsedSeconds(0), 0);
+      return () => clearTimeout(timeout);
+    }
 
-      setMotivosPausa(mList);
-      setShifts(sList);
-      setAuditLogs(aList);
-      setActiveShift(active);
+    const updateElapsedSeconds = () => setElapsedSeconds(
+      calculateNetTime(activeShift.hora_entrada, null, activeShift.pausas)
+    );
+
+    const timeout = setTimeout(updateElapsedSeconds, 0);
+    const interval = setInterval(updateElapsedSeconds, 1000);
+
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, [activeShift]);
+
+  const signIn = async (email, password) => {
+    try {
+      const { user } = await authService.signIn(email, password);
+      await loadWorkspaceForUser(user);
+      return { data: { user }, error: null };
     } catch (err) {
-      console.error('Error fetching user data from Supabase:', err);
+      return { error: { message: err.message || getDatabaseConfigMessage() } };
     } finally {
       setLoading(false);
     }
   };
 
-  // Setup authentication subscription listeners
-  useEffect(() => {
-    if (!isSupabaseConfigured()) {
-      console.error(getSupabaseConfigMessage());
-      setCurrentUser(null);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-
-    // Get current session active on mount
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      if (error) {
-        console.error('Supabase session error:', error);
-        setCurrentUser(null);
-        setLoading(false);
-        return;
-      }
-      if (session?.user) {
-        await handleAuthUser(session.user);
-      } else {
-        setCurrentUser(null);
-        setLoading(false);
-      }
-    }).catch(err => {
-      console.error('Unexpected error in getSession:', err);
-      setCurrentUser(null);
-      setLoading(false);
-    });
-
-    // Listen to real-time authentication state updates
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        await handleAuthUser(session.user);
-      } else {
-        setCurrentUser(null);
-        setActiveShift(null);
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  // 3. Real-time ticking logic for active shift
-  useEffect(() => {
-    if (!activeShift) {
-      setElapsedSeconds(0);
-      return;
-    }
-
-    setElapsedSeconds(
-      calculateNetTime(activeShift.hora_entrada, null, activeShift.pausas)
-    );
-
-    const interval = setInterval(() => {
-      setElapsedSeconds(
-        calculateNetTime(activeShift.hora_entrada, null, activeShift.pausas)
-      );
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [activeShift]);
-
-  // --- AUTHENTICATION ACTIONS ---
-
-  const signIn = async (email, password) => {
-    if (!isSupabaseConfigured()) {
-      return { error: { message: getSupabaseConfigMessage() } };
-    }
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      return { data, error };
-    } catch (err) {
-      return { error: err };
-    }
-  };
-
   const signUp = async (nombre, email, cargo, rol, password, telefono = {}) => {
-    if (!isSupabaseConfigured()) {
-      return { error: { message: getSupabaseConfigMessage() } };
-    }
-
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { user } = await authService.signUp({
+        nombre,
         email,
+        cargo,
+        rol,
         password,
-        options: {
-          data: {
-            nombre,
-            cargo,
-            rol,
-            telefono_codigo_pais: telefono.telefono_codigo_pais || '',
-            telefono_numero: telefono.telefono_numero || '',
-            telefono_whatsapp: telefono.telefono_whatsapp || ''
-          }
-        }
+        telefono
       });
-
-      if (error) return { error };
-
-      return { data, error: null };
+      return { data: { user }, error: null };
     } catch (err) {
-      return { error: err };
+      return { error: { message: err.message || getDatabaseConfigMessage() } };
     }
   };
 
   const signOut = async () => {
     try {
-      if (isSupabaseConfigured()) {
-        await supabase.auth.signOut();
-      }
+      await authService.signOut();
+    } catch (err) {
+      console.error('Error cerrando sesion:', err);
+    } finally {
       setCurrentUser(null);
       setActiveShift(null);
-    } catch (err) {
-      console.error('Error logging out:', err);
+      setShifts([]);
+      setAuditLogs([]);
     }
   };
-
-  // --- BUSINESS LOGIC: SHIFT TRANSITIONS (RF-01 to RF-06 & RF-17) ---
 
   const iniciarJornada = async () => {
     if (activeShift) {
@@ -216,15 +155,14 @@ export const AppProvider = ({ children }) => {
     try {
       const savedShift = await dbService.registrarEntrada(newShift);
       setActiveShift(savedShift);
-      setShifts(prev => [savedShift, ...prev]);
+      setShifts((prev) => [savedShift, ...prev]);
     } catch (err) {
-      console.error('Error starting shift:', err);
+      console.error('Error iniciando jornada:', err);
     }
   };
 
   const pausarJornada = async (motivo) => {
-    if (!activeShift) return;
-    if (activeShift.estado === 'pausado') return;
+    if (!activeShift || activeShift.estado === 'pausado') return;
 
     const pauseItem = {
       id: `p-${Date.now()}`,
@@ -242,12 +180,12 @@ export const AppProvider = ({ children }) => {
       const updatedShift = {
         ...activeShift,
         estado: 'pausado',
-        pausas: [...currentPausas.filter(p => p !== null && p !== undefined), resolvedPause]
+        pausas: [...currentPausas.filter((p) => p !== null && p !== undefined), resolvedPause]
       };
       setActiveShift(updatedShift);
-      setShifts(prev => prev.map(s => s.id === activeShift.id ? updatedShift : s));
+      setShifts((prev) => prev.map((s) => (s.id === activeShift.id ? updatedShift : s)));
     } catch (err) {
-      console.error('Error pausing shift:', err);
+      console.error('Error pausando jornada:', err);
     }
   };
 
@@ -256,23 +194,18 @@ export const AppProvider = ({ children }) => {
 
     const currentPausas = activeShift.pausas || [];
     const activePause = currentPausas
-      .filter(p => p !== null && p !== undefined)
-      .find(p => p.hora_fin === null || p.hora_fin === undefined);
+      .filter((p) => p !== null && p !== undefined)
+      .find((p) => p.hora_fin === null || p.hora_fin === undefined);
     if (!activePause) return;
 
     const horaFin = new Date().toISOString();
 
     try {
       await dbService.registrarReanudacion(activeShift.id, activePause.id, horaFin, currentUser.id);
-      
+
       const updatedPausas = currentPausas
-        .filter(p => p !== null && p !== undefined)
-        .map(p => {
-          if (p.id === activePause.id) {
-            return { ...p, hora_fin: horaFin };
-          }
-          return p;
-        });
+        .filter((p) => p !== null && p !== undefined)
+        .map((p) => (p.id === activePause.id ? { ...p, hora_fin: horaFin } : p));
 
       const updatedShift = {
         ...activeShift,
@@ -281,9 +214,9 @@ export const AppProvider = ({ children }) => {
       };
 
       setActiveShift(updatedShift);
-      setShifts(prev => prev.map(s => s.id === activeShift.id ? updatedShift : s));
+      setShifts((prev) => prev.map((s) => (s.id === activeShift.id ? updatedShift : s)));
     } catch (err) {
-      console.error('Error resuming shift:', err);
+      console.error('Error reanudando jornada:', err);
     }
   };
 
@@ -293,22 +226,20 @@ export const AppProvider = ({ children }) => {
     try {
       const horaSalida = new Date().toISOString();
       const currentPausas = activeShift.pausas || [];
-      
-      // Close any open pauses safely
+
       const updatedPausas = currentPausas
-        .filter(p => p !== null && p !== undefined)
-        .map(p => {
-          if (p.hora_fin === null || p.hora_fin === undefined) {
-            return { ...p, hora_fin: horaSalida };
-          }
-          return p;
-        });
+        .filter((p) => p !== null && p !== undefined)
+        .map((p) => (
+          p.hora_fin === null || p.hora_fin === undefined
+            ? { ...p, hora_fin: horaSalida }
+            : p
+        ));
 
       const netSeconds = calculateNetTime(activeShift.hora_entrada, horaSalida, updatedPausas);
 
       const openPause = currentPausas
-        .filter(p => p !== null && p !== undefined)
-        .find(p => p.hora_fin === null || p.hora_fin === undefined);
+        .filter((p) => p !== null && p !== undefined)
+        .find((p) => p.hora_fin === null || p.hora_fin === undefined);
 
       if (openPause) {
         await dbService.registrarReanudacion(activeShift.id, openPause.id, horaSalida, currentUser.id);
@@ -324,19 +255,16 @@ export const AppProvider = ({ children }) => {
         tiempo_neto: netSeconds
       };
 
-      setShifts(prev => prev.map(s => s.id === activeShift.id ? finalizedShift : s));
+      setShifts((prev) => prev.map((s) => (s.id === activeShift.id ? finalizedShift : s)));
       setActiveShift(null);
     } catch (err) {
-      console.error('Error finishing shift:', err);
-      // Failsafe: Clear active shift so the UI doesn't get stuck!
+      console.error('Error finalizando jornada:', err);
       setActiveShift(null);
     }
   };
 
-  // --- ADMIN ACTIONS (RF-13 to RF-16) ---
-
   const editarRegistroManual = async (shiftId, { hora_entrada, hora_salida, pausas, motivo_edicion }) => {
-    const oldShift = shifts.find(s => s.id === shiftId);
+    const oldShift = shifts.find((s) => s.id === shiftId);
     if (!oldShift) return;
 
     const netSeconds = calculateNetTime(hora_entrada, hora_salida, pausas);
@@ -351,10 +279,9 @@ export const AppProvider = ({ children }) => {
 
     try {
       await dbService.adminGuardarJornada(updatedShift, pausas);
-      setShifts(prev => prev.map(s => s.id === shiftId ? updatedShift : s));
+      setShifts((prev) => prev.map((s) => (s.id === shiftId ? updatedShift : s)));
 
-      // Document changes in Audit Log
-      const targetUser = users.find(u => u.id === oldShift.usuario_id);
+      const targetUser = users.find((u) => u.id === oldShift.usuario_id);
       const newLogs = [];
       const nowIso = new Date().toISOString();
 
@@ -393,10 +320,10 @@ export const AppProvider = ({ children }) => {
       }
 
       if (newLogs.length > 0) {
-        setAuditLogs(prev => [...newLogs, ...prev]);
+        setAuditLogs((prev) => [...newLogs, ...prev]);
       }
     } catch (err) {
-      console.error('Error saving manual shift edit:', err);
+      console.error('Error guardando edicion manual:', err);
     }
   };
 
@@ -404,40 +331,40 @@ export const AppProvider = ({ children }) => {
     const newUser = {
       id: `u-${Date.now()}`,
       activo: true,
-      avatar: userData.nombre.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+      avatar: userData.nombre.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2),
       ...userData
     };
 
     try {
       const savedUser = await dbService.insertUsuario(newUser);
-      setUsers(prev => [...prev, savedUser]);
+      setUsers((prev) => [...prev, savedUser]);
     } catch (err) {
-      console.error('Error creating user:', err);
+      console.error('Error creando usuario:', err);
     }
   };
 
   const actualizarUsuario = async (updatedUser) => {
     try {
       const savedUser = await dbService.updateUsuario(updatedUser);
-      setUsers(prev => prev.map(u => u.id === updatedUser.id ? savedUser : u));
-      if (updatedUser.id === currentUser.id) {
+      setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? savedUser : u)));
+      if (updatedUser.id === currentUser?.id) {
         setCurrentUser(savedUser);
       }
     } catch (err) {
-      console.error('Error updating user:', err);
+      console.error('Error actualizando usuario:', err);
     }
   };
 
   const eliminarUsuario = async (userId) => {
-    const target = users.find(u => u.id === userId);
+    const target = users.find((u) => u.id === userId);
     if (!target) return;
 
     try {
       const updated = { ...target, activo: false };
       const saved = await dbService.updateUsuario(updated);
-      setUsers(prev => prev.map(u => u.id === userId ? saved : u));
+      setUsers((prev) => prev.map((u) => (u.id === userId ? saved : u)));
     } catch (err) {
-      console.error('Error deactivating user:', err);
+      console.error('Error desactivando usuario:', err);
     }
   };
 
@@ -450,27 +377,27 @@ export const AppProvider = ({ children }) => {
 
     try {
       const saved = await dbService.insertMotivoPausa(newMotivo);
-      setMotivosPausa(prev => [...prev, saved]);
+      setMotivosPausa((prev) => [...prev, saved]);
     } catch (err) {
-      console.error('Error creating pause motive:', err);
+      console.error('Error creando motivo de pausa:', err);
     }
   };
 
   const actualizarMotivoPausa = async (id, nombre, activo) => {
     try {
       const saved = await dbService.updateMotivoPausa(id, nombre, activo);
-      setMotivosPausa(prev => prev.map(m => m.id === id ? saved : m));
+      setMotivosPausa((prev) => prev.map((m) => (m.id === id ? saved : m)));
     } catch (err) {
-      console.error('Error updating pause motive:', err);
+      console.error('Error actualizando motivo de pausa:', err);
     }
   };
 
   const eliminarMotivoPausa = async (id) => {
     try {
       await dbService.deleteMotivoPausa(id);
-      setMotivosPausa(prev => prev.filter(m => m.id !== id));
+      setMotivosPausa((prev) => prev.filter((m) => m.id !== id));
     } catch (err) {
-      console.error('Error deleting pause motive:', err);
+      console.error('Error eliminando motivo de pausa:', err);
     }
   };
 
@@ -478,7 +405,7 @@ export const AppProvider = ({ children }) => {
     try {
       const savedUser = await dbService.updateFaceDescriptor(userId, descriptor);
       if (savedUser) {
-        setUsers(prev => prev.map(u => u.id === userId ? savedUser : u));
+        setUsers((prev) => prev.map((u) => (u.id === userId ? savedUser : u)));
         if (currentUser?.id === userId) {
           setCurrentUser(savedUser);
         }
@@ -491,7 +418,7 @@ export const AppProvider = ({ children }) => {
 
   return (
     <AppContext.Provider value={{
-      isSupabaseConfigured,
+      isDatabaseConfigured,
       loading,
       users,
       currentUser,

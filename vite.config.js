@@ -42,4 +42,12 @@ const htmlVersionPlugin = () => ({
 
 export default defineConfig({
   plugins: [react(), htmlVersionPlugin()],
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.VITE_DEV_API_TARGET || 'http://localhost:3000',
+        changeOrigin: true
+      }
+    }
+  }
 })
