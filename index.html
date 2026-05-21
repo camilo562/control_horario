@@ -5,6 +5,10 @@
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/src/assets/react.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta name="app-version" content="%APP_VERSION%" />
   <meta name="description" content="Plataforma de Control Horario y Auditoría de Jornadas para SAMMERS-JEANS." />
   <title> Sistema de Control Horario y Fichaje</title>
   <!-- Google Fonts Outfit & Inter -->
@@ -16,6 +20,73 @@
 </head>
 
 <body class="bg-dark-950 text-slate-100 antialiased">
+  <script>
+    (function () {
+      var currentVersion = "%APP_VERSION%";
+      var cookieName = "control_horario_html_version";
+
+      function readVersionCookie() {
+        var match = document.cookie
+          .split("; ")
+          .find(function (item) {
+            return item.indexOf(cookieName + "=") === 0;
+          });
+
+        return match ? decodeURIComponent(match.split("=")[1]) : "";
+      }
+
+      function saveVersionCookie(version) {
+        document.cookie = cookieName + "=" + encodeURIComponent(version) + "; path=/; max-age=31536000; SameSite=Lax";
+      }
+
+      function clearRuntimeCaches() {
+        var cacheCleanup = "caches" in window
+          ? window.caches.keys().then(function (keys) {
+              return Promise.all(keys.map(function (key) {
+                return window.caches.delete(key);
+              }));
+            })
+          : Promise.resolve();
+
+        var workerCleanup = "serviceWorker" in navigator
+          ? navigator.serviceWorker.getRegistrations().then(function (registrations) {
+              return Promise.all(registrations.map(function (registration) {
+                return registration.unregister();
+              }));
+            })
+          : Promise.resolve();
+
+        return Promise.all([cacheCleanup, workerCleanup]);
+      }
+
+      function applyServerVersion(serverVersion) {
+        var previousVersion = readVersionCookie();
+
+        if (previousVersion && previousVersion !== serverVersion) {
+          clearRuntimeCaches().finally(function () {
+            saveVersionCookie(serverVersion);
+            var nextUrl = new URL(window.location.href);
+            nextUrl.searchParams.set("v", serverVersion);
+            window.location.replace(nextUrl.toString());
+          });
+          return;
+        }
+
+        saveVersionCookie(serverVersion);
+      }
+
+      fetch("/version.json?t=" + Date.now(), { cache: "no-store" })
+        .then(function (response) {
+          return response.ok ? response.json() : { version: currentVersion };
+        })
+        .then(function (data) {
+          applyServerVersion(data.version || currentVersion);
+        })
+        .catch(function () {
+          applyServerVersion(currentVersion);
+        });
+    })();
+  </script>
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
 </body>
